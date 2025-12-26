@@ -1,4 +1,7 @@
-
+![Packer](https://img.shields.io/badge/packer-FUP-02A8EF?style=for-the-badge&logo=packer&logoColor=white)
+![Proxmox](https://img.shields.io/badge/Proxmox-VE-E57000?style=for-the-badge&logo=proxmox&logoColor=white)
+![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
+![Build Status](https://img.shields.io/badge/build-passing-success?style=for-the-badge)
 # Automated Ubuntu Server Template for Proxmox
 
 This repository contains HashiCorp Packer configuration to automate the creation of a "Golden Image" (Template) for Ubuntu Server 22.04 on a Proxmox VE environment.
@@ -74,7 +77,7 @@ ssh -N -f -L localhost:8006:10.40.18.xx:8006 e20094@tesla.ce.pdn.ac.lk
 ```
 
 - Replace `10.40.18.xx` with your specific Proxmox Node IP.
-- Replace <USER> with your registration number.
+- Replace `e20094` with your registration number.
 
 ### Step 2: Initialize & Build
 
