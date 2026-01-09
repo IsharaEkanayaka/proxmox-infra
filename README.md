@@ -75,7 +75,7 @@ cp credentials.auto.pkrvars.hcl.example credentials.auto.pkrvars.hcl
 proxmox_api_url          = "https://localhost:8006/api2/json"
 proxmox_api_token_id     = "your-token-id"
 proxmox_api_token_secret = "your-token-secret"
-ssh_bastion_username     = "e20094"
+ssh_bastion_username     = "exxyyy"
 ssh_bastion_password     = "your-tesla-password"
 ```
 
@@ -83,9 +83,9 @@ ssh_bastion_password     = "your-tesla-password"
 
 ```bash
 # Open tunnel to Proxmox through bastion host
-ssh -N -f -L localhost:8006:10.40.18.xx:8006 e20094@tesla.ce.pdn.ac.lk
+ssh -N -f -L localhost:8006:10.40.18.xx:8006 exxyyy@tesla.ce.pdn.ac.lk
 ```
-Replace `10.40.18.xx` with your Proxmox node IP.
+Replace `10.40.18.xx` with your Proxmox node IP and `exxyyy` with your registration number.
 
 #### 1.3 Build Template
 
