@@ -1,0 +1,124 @@
+---
+# Disable swap (required by kubelet)
+- name: Disable swap immediately
+  command: swapoff -a
+  changed_when: false
+
+- name: Remove swap from /etc/fstab
+  lineinfile:
+    path: /etc/fstab
+    regexp: '\sswap\s'
+    state: absent
+
+# Load required kernel modules
+- name: Load kernel modules for containerd
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: Persist kernel modules
+  copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      overlay
+      br_netfilter
+
+# Set required sysctl parameters
+- name: Set sysctl parameters for Kubernetes
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/k8s.conf
+    reload: true
+  loop:
+    - { key: net.bridge.bridge-nf-call-iptables, value: "1" }
+    - { key: net.bridge.bridge-nf-call-ip6tables, value: "1" }
+    - { key: net.ipv4.ip_forward, value: "1" }
+
+# Install containerd
+- name: Install dependencies
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+
+- name: Add Docker GPG key
+  get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+
+- name: Add Docker repository
+  apt_repository:
+    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+
+- name: Install containerd
+  apt:
+    name: containerd.io
+    state: present
+    update_cache: true
+
+- name: Create containerd config directory
+  file:
+    path: /etc/containerd
+    state: directory
+
+- name: Generate default containerd config
+  shell: containerd config default > /etc/containerd/config.toml
+  changed_when: true
+
+- name: Set SystemdCgroup to true in containerd config
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: 'SystemdCgroup = false'
+    replace: 'SystemdCgroup = true'
+
+- name: Restart and enable containerd
+  systemd:
+    name: containerd
+    state: restarted
+    enabled: true
+    daemon_reload: true
+
+# Install kubeadm, kubelet, kubectl
+- name: Add Kubernetes GPG key
+  get_url:
+    url: "https://pkgs.k8s.io/core:/stable:/v{{ k8s_version_minor }}/deb/Release.key"
+    dest: /etc/apt/keyrings/kubernetes-apt-keyring.asc
+    mode: "0644"
+
+- name: Add Kubernetes repository
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v{{ k8s_version_minor }}/deb/ /"
+    state: present
+
+- name: Install kubelet, kubeadm, kubectl
+  apt:
+    name:
+      - "kubelet={{ k8s_version_full }}"
+      - "kubeadm={{ k8s_version_full }}"
+      - "kubectl={{ k8s_version_full }}"
+    state: present
+    update_cache: true
+
+- name: Hold Kubernetes packages at current version
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl
+
+- name: Enable kubelet service
+  systemd:
+    name: kubelet
+    enabled: true

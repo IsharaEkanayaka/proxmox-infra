@@ -2,15 +2,18 @@
 ![Proxmox](https://img.shields.io/badge/Proxmox-VE-E57000?style=for-the-badge&logo=proxmox&logoColor=white)
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
 ![Terraform](https://img.shields.io/badge/Terraform-1.x-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)
+![Ansible](https://img.shields.io/badge/Ansible-2.x-EE0000?style=for-the-badge&logo=ansible&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-1.31-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)
 
 # Proxmox Infrastructure Automation
 
-Infrastructure-as-code for Proxmox VE using **Packer** (template creation) and **Terraform** (VM provisioning) with **static IP assignment** via cloud-init.
+Infrastructure-as-code for Proxmox VE using **Packer** (template creation), **Terraform** (VM provisioning), and **Ansible** (Kubernetes cluster setup) with **static IP assignment** via cloud-init.
 
 ## Features
 
 - **Packer Template Builder** — Automated Ubuntu Server 22.04 template with cloud-init support
 - **Terraform VM Provisioning** — Deploy multiple VMs with static IPs from a single command
+- **Ansible Kubernetes Setup** — Automated kubeadm cluster with 1 control plane + N workers
 - **Cloud-Init Integration** — Static IP, DNS, and user configuration injected via Proxmox NoCloud drive
 - **QEMU Guest Agent** — Enabled by default for IP reporting and VM management
 
@@ -32,6 +35,14 @@ Infrastructure-as-code for Proxmox VE using **Packer** (template creation) and *
 │   ├── versions.tf                    # Provider version constraints
 │   ├── terraform.tfvars               # Variable values (gitignored)
 │   └── terraform.tfvars.example       # Example variable values
+├── ansible/
+│   ├── ansible.cfg                    # Ansible configuration
+│   ├── inventory.ini                  # Node inventory (IPs and roles)
+│   ├── site.yml                       # Main playbook
+│   └── roles/
+│       ├── common/                    # Containerd, kubeadm, kubelet, kubectl
+│       ├── control_plane/             # kubeadm init, Flannel CNI
+│       └── worker/                    # kubeadm join
 └── README.md
 ```
 
@@ -41,6 +52,7 @@ Infrastructure-as-code for Proxmox VE using **Packer** (template creation) and *
 
 - [Packer](https://developer.hashicorp.com/packer/downloads) >= 1.10
 - [Terraform](https://www.terraform.io/downloads) >= 1.0
+- [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/) >= 2.12
 - [xorriso](https://www.gnu.org/software/xorriso/) — `sudo apt install xorriso` (Linux)
 
 ### Proxmox
@@ -118,7 +130,40 @@ vm_names        = ["k8s-node-1", "k8s-node-2", "k8s-node-3"]
 vm_ip_addresses = ["10.40.19.201", "10.40.19.202", "10.40.19.203"]
 ```
 
-### 3. Tear Down
+### 3. Set Up Kubernetes Cluster with Ansible
+
+```bash
+cd ../ansible
+```
+
+Run the playbook:
+
+```bash
+ansible-playbook site.yml
+```
+
+This will:
+1. Install containerd, kubeadm, kubelet, and kubectl on all nodes
+2. Initialize the control plane on `k8s-node-1` with Flannel CNI
+3. Join `k8s-node-2` and `k8s-node-3` as workers
+4. Print the cluster node status
+
+Verify the cluster:
+
+```bash
+ssh ubuntu@10.40.19.201 "kubectl get nodes"
+```
+
+Expected output:
+
+```
+NAME         STATUS   ROLES           AGE   VERSION
+k8s-node-1   Ready    control-plane   5m    v1.31.4
+k8s-node-2   Ready    <none>          3m    v1.31.4
+k8s-node-3   Ready    <none>          3m    v1.31.4
+```
+
+### 4. Tear Down
 
 ```bash
 terraform destroy
@@ -211,6 +256,16 @@ The Packer template is prepared for this by:
 │  Full clone from template 990                    │
 │  Inject static IP + user config via cloud-init   │
 │  Start VMs with assigned IPs                     │
+└──────────────────────┬───────────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────────┐
+│        3. ANSIBLE: Kubernetes Cluster            │
+├──────────────────────────────────────────────────┤
+│  Install containerd + kubeadm on all nodes       │
+│  Initialize control plane (k8s-node-1)           │
+│  Install Flannel CNI                             │
+│  Join worker nodes to cluster                    │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -226,6 +281,9 @@ The Packer template is prepared for this by:
 | Terraform: VMs get DHCP IPs | Rebuild template — the cloud-init drive or cleanup may be missing |
 | Terraform: Template not found | Verify template ID 990 exists in Proxmox |
 | Terraform: Connection refused | Use `https://host:8006/api2/json` for API URL |
+| Ansible: SSH connection refused | Wait for VMs to fully boot, check IPs with `terraform output` |
+| Ansible: `kubeadm init` fails | Ensure VMs have at least 2 CPUs and 1700 MB RAM |
+| Ansible: workers not joining | Re-run `ansible-playbook site.yml` to regenerate join token |
 
 ---
 
