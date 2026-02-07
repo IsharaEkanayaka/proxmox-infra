@@ -50,12 +50,6 @@ variable "vm_memory" {
   default     = 2048
 }
 
-variable "vm_disk_size" {
-  description = "Disk size (e.g., 20G)"
-  type        = string
-  default     = "20G"
-}
-
 variable "vm_storage" {
   description = "Storage pool for VM disks"
   type        = string
@@ -66,6 +60,30 @@ variable "network_bridge" {
   description = "Network bridge to use"
   type        = string
   default     = "vmbr0"
+}
+
+variable "vm_ip_start" {
+  description = "Starting IP address for the VMs (last octet)" 
+  type = number
+  default = 201
+}
+
+variable "vm_ip_gateway" {
+  description = "Gateway IP address for the network"
+  type        = string
+  default     = "10.40.19.254"
+}
+
+variable "vm_ip_prefix" {
+  description = "Network prefix (e.g., 10.40.19.)"
+  type        = string
+  default     = "10.40.19."
+}
+
+variable "vm_dns_server" {
+  description = "DNS Server IP"
+  type        = string
+  default     = "10.40.2.1"
 }
 
 variable "ssh_user" {

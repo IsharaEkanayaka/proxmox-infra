@@ -25,7 +25,6 @@ packer {
 }
 
 source "proxmox-iso" "ubuntu-server" {
-  # --- Connection & Hardware ---
   proxmox_url = var.proxmox_api_url
   username    = var.proxmox_api_token_id
   token       = var.proxmox_api_token_secret
@@ -36,14 +35,17 @@ source "proxmox-iso" "ubuntu-server" {
   vm_name   = "ubuntu-server-template"
   
   boot_iso {
-    type = "ide"   # Explicitly set the bus type
+    type     = "ide"
     iso_file = "local:iso/ubuntu-22.04.5-live-server-amd64.iso"
-    unmount = true
+    unmount  = true
   }
   qemu_agent       = true
   cores            = 2
   memory           = 2048
   scsi_controller  = "virtio-scsi-pci"
+
+  cloud_init              = true
+  cloud_init_storage_pool = "local-lvm"
 
   disks {
     disk_size    = "20G"
@@ -58,23 +60,20 @@ source "proxmox-iso" "ubuntu-server" {
     firewall = "false"
   }
 
-  # --- Cloud-Init CD Configuration ---
-  # This creates a small ISO with your config files and uploads it to Proxmox
   additional_iso_files {
-    cd_files = ["./http/user-data", "./http/meta-data"]
-    cd_label = "cidata"
+    cd_files         = ["./http/user-data", "./http/meta-data"]
+    cd_label         = "cidata"
     iso_storage_pool = "local"
-    type     = "ide"     
-    index    = 3           # <--- Force it to the secondary slot (ide3)
+    unmount          = true
+    type             = "ide"
+    index            = 3
   }
 
-  # --- UPDATED: Boot Command ---
   boot_wait = "10s"
   
   boot_command = [
     "c",
     "<wait2>",
-    # logic: ds=nocloud;s=/cdrom/ tells Ubuntu to look at the attached CD drive
     "linux /casper/vmlinuz --- autoinstall ds=nocloud;s=/cdrom/",
     "<enter>",
     "<wait2>",
@@ -95,13 +94,29 @@ build {
 
   provisioner "shell" {
     inline = [
-      "echo '⚠️ Resetting machine-id for unique DHCP leases...'",
-      
-      # We use 'tee' because it works with sudo pipes (simple redirection > fails)
+      "echo '--- Resetting machine-id ---'",
       "echo -n | sudo tee /etc/machine-id",
-      
       "sudo rm -f /var/lib/dbus/machine-id",
-      "sudo rm -f /etc/netplan/99-config.yaml"
+
+      "echo '--- Removing subiquity configs that block cloud-init networking ---'",
+      "sudo rm -f /etc/cloud/cloud.cfg.d/subiquity-disable-cloudinit-networking.cfg",
+      "sudo rm -f /etc/cloud/cloud.cfg.d/99-installer.cfg",
+      "sudo rm -f /etc/cloud/cloud.cfg.d/curtin-preserve-sources.cfg",
+
+      "echo '--- Removing autoinstall netplan configs ---'",
+      "sudo rm -f /etc/netplan/*.yaml",
+      "sudo rm -f /etc/netplan/*.yml",
+
+      "echo '--- Configuring cloud-init datasource for Proxmox (NoCloud) ---'",
+      "echo 'datasource_list: [NoCloud, ConfigDrive, None]' | sudo tee /etc/cloud/cloud.cfg.d/99-pve.cfg",
+
+      "echo '--- Cleaning cloud-init state ---'",
+      "sudo cloud-init clean --logs",
+      "sudo rm -rf /var/lib/cloud/",
+
+      "echo '--- Truncating logs ---'",
+      "sudo truncate -s 0 /var/log/cloud-init.log || true",
+      "sudo truncate -s 0 /var/log/cloud-init-output.log || true"
     ]
   }
 }

@@ -30,10 +30,16 @@ resource "proxmox_virtual_environment_vm" "ubuntu_vm" {
   }
 
   initialization {
+    datastore_id = var.vm_storage
+    interface    = "ide2"
     ip_config {
       ipv4 {
-        address = "dhcp"
+        address = "${var.vm_ip_prefix}${var.vm_ip_start + count.index}/24"
+        gateway = var.vm_ip_gateway
       }
+    }
+    dns {
+      servers = [var.vm_dns_server]
     }
     user_account {
       username = var.ssh_user
