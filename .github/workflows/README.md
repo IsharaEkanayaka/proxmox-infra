@@ -9,9 +9,7 @@ Automates **Proxmox VE** virtual machine deployment using **Terraform** and **CI
 ### A. SSH Tunneling
 
 You need to create an **SSH tunnel** to securely connect to the internal **Proxmox API**.
-
-```bash
-ssh -N -f -L localhost:8006:10.40.19.230:8006 <e-number>@tesla.ce.pdn.ac.lk
+(Consider the guide at the root)
 
 ### B. GitHub Actions Secrets
 

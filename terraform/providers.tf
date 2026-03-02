@@ -1,6 +1,6 @@
 terraform {
   backend "local" {
-    path = "path/to/terraform.tfstate"
+    path = "C:/terraform-state/terraform.tfstate"
   }
 }
 provider "proxmox" {
