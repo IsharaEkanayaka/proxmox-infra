@@ -1,0 +1,10 @@
+- name: Terraform Apply
+        working-directory: ./terraform
+        env:
+          # This overrides your .tfvars file automatically
+          TF_VAR_worker_count: 1          
+          TF_VAR_cp_memory: 2048
+          TF_VAR_proxmox_api_url: ${{ secrets.PROXMOX_API_URL }}
+          TF_VAR_proxmox_api_token_id: ${{ secrets.PROXMOX_API_TOKEN_ID }}
+          TF_VAR_proxmox_api_token_secret: ${{ secrets.PROXMOX_API_TOKEN_SECRET }}
+        run: terraform apply -auto-approve
