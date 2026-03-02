@@ -22,6 +22,9 @@ Infrastructure-as-code for Proxmox VE using **Packer** (template creation), **Te
 
 ```
 .
+├── .github/
+│   └── workflows/
+│       └── infra-deploy.yml                   # CI/CD Pipeline (Terraform Plan & Apply)
 ├── agent/                                     # Intent-driven provisioning agent
 │   ├── cli.py                                 # CLI entry point
 │   ├── intent_parser_llm.py                   # LLM-powered intent → ClusterSpec
