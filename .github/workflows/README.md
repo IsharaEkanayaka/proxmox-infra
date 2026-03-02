@@ -40,7 +40,6 @@ You need to set up a **Self-Hosted Runner** on your local machine to run the CI/
 
 If you're using **Windows**, run this command to allow the execution of the runner script:
 
-```powershell
 Set-ExecutionPolicy RemoteSigned -Scope LocalMachine
 
 ### Start the Runner:
@@ -48,8 +47,7 @@ Set-ExecutionPolicy RemoteSigned -Scope LocalMachine
 1. Navigate to the directory where the runner is installed.
 2. Run the following command to start the runner:
 
-```powershell
-.\run.cmd
+.\run.cmd 
 
 The runner should stay **idle (green)** and ready to trigger the CI/CD pipeline when necessary.
 
