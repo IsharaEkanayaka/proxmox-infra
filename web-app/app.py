@@ -1,27 +1,30 @@
 import os
 import subprocess
+import platform
 from flask import Flask, render_template, request, Response
 
 app = Flask(__name__)
 
-# --- Directory Mapping ---
-# Jumps up from /web-app/ to Root, then into /terraform
+# --- Universal Directory Mapping ---
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TERRAFORM_DIR = os.path.join(BASE_DIR, "terraform")
 
-def run_command(command, cwd):
-    """Executes a shell command and yields output line by line."""
-    process = subprocess.Popen(
-        command,
-        cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        shell=True
-    )
-    for line in process.stdout:
-        yield line
-    process.wait()
+def get_tf_command(user_intent):
+    """Detects OS and builds the correct Terraform command."""
+    is_windows = platform.system() == "Windows"
+    
+    # Use standard terraform command (ensure it's in your PATH on ada)
+    tf_bin = "terraform"
+    
+    # Build -var flags dynamically from the UI form inputs
+    var_flags = ""
+    for key, value in user_intent.items():
+        if is_windows:
+            var_flags += f" -var=\"{key}={value}\""
+        else:
+            var_flags += f" -var='{key}={value}'"
+
+    return f"{tf_bin} init && {tf_bin} apply -auto-approve{var_flags}"
 
 @app.route('/')
 def index():
@@ -29,23 +32,37 @@ def index():
 
 @app.route('/provision', methods=['POST'])
 def provision():
-    # Get count from user intent
-    worker_count = request.form.get('worker_count', 2)
+    # Capture all form inputs as a dictionary
+    user_intent = request.form.to_dict()
 
     def generate():
-        yield f" Intent Received: Provisioning {worker_count} workers...\n"
+        yield "🚀 Intent Received. Preparing Terraform variables...\n"
+        full_cmd = get_tf_command(user_intent)
+        
+        yield f"💻 System: {platform.system()} | Overrides: {len(user_intent)}\n"
         yield "--------------------------------------------------\n"
         
-        # FIX: We use escaped double quotes \" for Windows compatibility
-        # This prevents the 'Value for undeclared variable' error.
-        tf_cmd = f"terraform init && terraform apply -auto-approve -var=\"worker_count={worker_count}\""
+        process = subprocess.Popen(
+            full_cmd,
+            cwd=TERRAFORM_DIR,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            shell=True
+        )
         
-        for line in run_command(tf_cmd, TERRAFORM_DIR):
+        for line in process.stdout:
             yield line
-
-        yield f"\n Terraform process finished for {worker_count} workers."
+        
+        return_code = process.wait()
+        
+        if return_code == 0:
+            yield "\n✅ Infrastructure lifecycle completed successfully."
+        else:
+            yield f"\n❌ Terraform failed (Exit Code: {return_code})."
 
     return Response(generate(), mimetype='text/plain')
 
 if __name__ == '__main__':
+    # Ready for Ada server
     app.run(debug=True, host='0.0.0.0', port=5000)

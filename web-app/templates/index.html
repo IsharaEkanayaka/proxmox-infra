@@ -1,27 +1,74 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Proxmox Intent UI</title>
+    <title>Proxmox Infrastructure Intent</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #eceff1; padding: 40px; }
-        .container { background: white; max-width: 700px; margin: auto; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        #terminal { background: #121212; color: #00e676; padding: 15px; border-radius: 6px; height: 350px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 13px; white-space: pre-wrap; margin-top: 20px; }
-        button { background: #1976d2; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: bold; }
-        button:disabled { background: #b0bec5; }
-        input { padding: 10px; width: 60px; border: 1px solid #ccc; border-radius: 4px; margin-right: 10px; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #eceff1; padding: 20px; }
+        .container { background: white; max-width: 900px; margin: auto; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .section { border: 1px solid #e0e0e0; padding: 15px; border-radius: 8px; }
+        .section h3 { margin-top: 0; color: #1976d2; font-size: 16px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        
+        .form-group { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        label { font-size: 13px; color: #555; font-weight: 500; }
+        input { padding: 8px; width: 140px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+        
+        #terminal { background: #121212; color: #00e676; padding: 15px; border-radius: 6px; height: 350px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 12px; white-space: pre-wrap; margin-top: 20px; border: 1px solid #333; }
+        
+        .actions { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+        button { background: #1976d2; color: white; border: none; padding: 14px 30px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; font-size: 15px; transition: background 0.3s; }
+        button:hover { background: #1565c0; }
+        button:disabled { background: #b0bec5; cursor: not-allowed; }
+        
+        .header-area { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .badge { background: #e8f5e9; color: #2e7d32; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Proxmox Infrastructure</h2>
-    <p>Specify worker nodes to provision on the Proxmox cluster.</p>
+    <div class="header-area">
+        <h2>🛠️ Proxmox Infrastructure</h2>
+        <span class="badge">Connected to Ada Server</span>
+    </div>
 
-    <label>Worker Count: </label>
-    <input type="number" id="workerCount" value="2" min="1" max="10">
-    <button id="deployBtn">Deploy Cluster</button>
+    <div class="grid">
+        <div class="section">
+            <h3> Cluster Size</h3>
+            <div class="form-group"><label>Control Planes</label><input type="number" id="control_plane_count" value="1"></div>
+            <div class="form-group"><label>Worker Nodes</label><input type="number" id="worker_count" value="2"></div>
+            <div class="form-group"><label>VM Name Prefix</label><input type="text" id="vm_name_prefix" value="k8s-node"></div>
+        </div>
 
-    <div id="terminal">System Ready... Waiting for intent.</div>
+        <div class="section">
+            <h3> VM Resources</h3>
+            <div class="form-group"><label>CP Cores</label><input type="number" id="cp_cores" value="2"></div>
+            <div class="form-group"><label>CP RAM (MB)</label><input type="number" id="cp_memory" value="4096"></div>
+            <div class="form-group"><label>Worker Cores</label><input type="number" id="worker_cores" value="2"></div>
+            <div class="form-group"><label>Worker RAM (MB)</label><input type="number" id="worker_memory" value="2048"></div>
+        </div>
+
+        <div class="section">
+            <h3> Network</h3>
+            <div class="form-group"><label>Bridge</label><input type="text" id="network_bridge" value="vmbr0"></div>
+            <div class="form-group"><label>IP Prefix</label><input type="text" id="vm_ip_prefix" value="10.40.19."></div>
+            <div class="form-group"><label>IP Start (.xxx)</label><input type="number" id="vm_ip_start" value="201"></div>
+            <div class="form-group"><label>DNS Server</label><input type="text" id="vm_dns_server" value="10.40.2.1"></div>
+        </div>
+
+        <div class="section">
+            <h3> Proxmox Host</h3>
+            <div class="form-group"><label>Target Node</label><input type="text" id="target_node" value="pve1"></div>
+            <div class="form-group"><label>Template ID</label><input type="number" id="template_id" value="990"></div>
+            <div class="form-group"><label>Storage Pool</label><input type="text" id="vm_storage" value="local-lvm"></div>
+        </div>
+    </div>
+
+    <div class="actions">
+        <button id="deployBtn">🚀 Provision Infrastructure</button>
+    </div>
+
+    <div id="terminal">Ready. Enter your cluster intent above and click Provision.</div>
 </div>
 
 <script>
@@ -29,25 +76,35 @@
     const terminal = document.getElementById('terminal');
 
     btn.onclick = async () => {
+        // Clear terminal and disable button
+        terminal.innerText = "⏳ Initializing Terraform lifecycle...\n";
         btn.disabled = true;
-        terminal.innerText = "Connecting to Proxmox API...\n";
         
         const formData = new FormData();
-        formData.append('worker_count', document.getElementById('workerCount').value);
+        // Automatically gather all input values based on their IDs
+        document.querySelectorAll('input').forEach(input => {
+            formData.append(input.id, input.value);
+        });
 
         try {
-            const response = await fetch('/provision', { method: 'POST', body: formData });
+            const response = await fetch('/provision', { 
+                method: 'POST', 
+                body: formData 
+            });
+
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
 
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
+                
+                // Append new logs and auto-scroll
                 terminal.innerText += decoder.decode(value);
                 terminal.scrollTop = terminal.scrollHeight;
             }
         } catch (e) {
-            terminal.innerText += "\n[Error] Could not connect to the backend.";
+            terminal.innerText += "\n\n❌ [Error] Failed to communicate with the Ada backend server.";
         } finally {
             btn.disabled = false;
         }
