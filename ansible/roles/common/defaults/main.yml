@@ -1,0 +1,4 @@
+---
+k8s_version_minor: "1.31"
+k8s_version_full: "1.31.4-1.1"
+pod_network_cidr: "10.244.0.0/16"

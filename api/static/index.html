@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>K8s Cluster Manager</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --surface2: #334155;
+    --border: #475569; --text: #e2e8f0; --muted: #94a3b8;
+    --primary: #3b82f6; --primary-hover: #2563eb;
+    --green: #22c55e; --red: #ef4444; --yellow: #eab308; --cyan: #06b6d4;
+    --radius: 8px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* Layout */
+  .app { display: flex; min-height: 100vh; }
+  .sidebar { width: 240px; background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0; flex-shrink: 0; }
+  .sidebar h1 { font-size: 16px; padding: 0 20px 20px; border-bottom: 1px solid var(--border); color: var(--primary); letter-spacing: 0.5px; }
+  .sidebar h1 span { color: var(--muted); font-weight: 400; font-size: 12px; display: block; margin-top: 2px; }
+  .nav { list-style: none; margin-top: 12px; }
+  .nav li { padding: 10px 20px; cursor: pointer; font-size: 14px; color: var(--muted); transition: all .15s; display: flex; align-items: center; gap: 10px; }
+  .nav li:hover { background: var(--surface2); color: var(--text); }
+  .nav li.active { background: var(--primary); color: #fff; border-radius: 0; }
+  .nav li .icon { width: 18px; text-align: center; }
+
+  .main { flex: 1; padding: 24px 32px; overflow-y: auto; }
+
+  /* Auth bar */
+  .auth-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; padding: 12px 16px; background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); }
+  .auth-bar label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .auth-bar input { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: var(--radius); font-size: 13px; font-family: monospace; }
+  .auth-bar .user-info { font-size: 12px; color: var(--cyan); white-space: nowrap; }
+
+  /* Cards & Tables */
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .page-header h2 { font-size: 20px; font-weight: 600; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 10px 12px; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--surface2); }
+  tr:hover td { background: rgba(59,130,246,0.05); }
+
+  /* Buttons */
+  .btn { padding: 8px 16px; border: none; border-radius: var(--radius); cursor: pointer; font-size: 13px; font-weight: 500; transition: all .15s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-danger:hover { background: #dc2626; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* Status badges */
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .badge-running, .badge-active { background: rgba(34,197,94,.15); color: var(--green); }
+  .badge-creating, .badge-pending { background: rgba(234,179,8,.15); color: var(--yellow); }
+  .badge-error, .badge-failed { background: rgba(239,68,68,.15); color: var(--red); }
+  .badge-deleting, .badge-deleted { background: rgba(148,163,184,.15); color: var(--muted); }
+
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; min-width: 400px; max-width: 500px; }
+  .modal h3 { margin-bottom: 16px; font-size: 16px; }
+  .modal .form-group { margin-bottom: 14px; }
+  .modal label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .modal input, .modal select { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: var(--radius); font-size: 14px; }
+  .modal .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+  .btn-cancel { background: var(--surface2); color: var(--text); }
+
+  /* Toast */
+  .toast-container { position: fixed; top: 20px; right: 20px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
+  .toast { padding: 12px 20px; border-radius: var(--radius); font-size: 13px; animation: slideIn .2s; max-width: 400px; word-break: break-word; }
+  .toast-success { background: rgba(34,197,94,.2); border: 1px solid var(--green); color: var(--green); }
+  .toast-error { background: rgba(239,68,68,.2); border: 1px solid var(--red); color: var(--red); }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+  /* Empty state */
+  .empty { text-align: center; padding: 40px; color: var(--muted); }
+  .empty .icon { font-size: 32px; margin-bottom: 8px; }
+
+  /* Monospace IDs */
+  .mono { font-family: monospace; font-size: 12px; color: var(--cyan); }
+
+  /* Loading */
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .hidden { display: none; }
+
+  /* Clickable row */
+  .clickable { cursor: pointer; }
+
+  /* Login screen */
+  .login-screen { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 300; }
+  .login-box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 40px; width: 100%; max-width: 400px; text-align: center; }
+  .login-box h1 { font-size: 22px; color: var(--primary); margin-bottom: 4px; }
+  .login-box .subtitle { font-size: 13px; color: var(--muted); margin-bottom: 28px; }
+  .login-box .form-group { margin-bottom: 16px; text-align: left; }
+  .login-box label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .login-box input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: var(--radius); font-size: 14px; font-family: monospace; }
+  .login-box input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(59,130,246,.25); }
+  .login-box .btn-login { width: 100%; padding: 10px; font-size: 14px; margin-top: 4px; }
+  .login-box .login-error { color: var(--red); font-size: 13px; margin-top: 12px; min-height: 20px; }
+  .login-box .spinner { margin: 0 auto; }
+
+  /* Sidebar user/logout */
+  .sidebar-footer { margin-top: auto; border-top: 1px solid var(--border); padding: 12px 20px; }
+  .sidebar-footer .user-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sidebar-footer .btn-logout { background: transparent; border: 1px solid var(--border); color: var(--muted); width: 100%; padding: 6px; font-size: 12px; border-radius: var(--radius); cursor: pointer; transition: all .15s; }
+  .sidebar-footer .btn-logout:hover { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<!-- Login Screen -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <h1>K8s Manager</h1>
+    <p class="subtitle">Sign in to manage your clusters</p>
+    <div class="form-group">
+      <label>Username</label>
+      <input id="loginUsername" type="text" placeholder="admin" autofocus style="font-family: inherit;" />
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input id="loginPassword" type="password" placeholder="••••••••" />
+    </div>
+    <button class="btn btn-primary btn-login" id="loginBtn" onclick="doLogin()">Sign In</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<div class="app" id="appShell" style="display:none">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" style="display:flex; flex-direction:column;">
+    <h1>K8s Manager <span>Cluster Platform</span></h1>
+    <ul class="nav" id="nav">
+      <li data-page="clusters" class="active"><span class="icon">&#9679;</span> Clusters</li>
+      <li data-page="environments"><span class="icon">&#9670;</span> Environments</li>
+      <li data-page="namespaces"><span class="icon">&#9644;</span> Namespaces</li>
+      <li data-page="jobs"><span class="icon">&#8635;</span> Jobs</li>
+      <li data-page="users"><span class="icon">&#9786;</span> Users</li>
+      <li data-page="permissions"><span class="icon">&#9919;</span> Permissions</li>
+    </ul>
+    <div class="sidebar-footer">
+      <div class="user-label" id="sidebarUser"></div>
+      <button class="btn-logout" onclick="doLogout()">Sign Out</button>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <div class="main">
+
+    <!-- Pages -->
+
+    <!-- Clusters -->
+    <div id="page-clusters" class="page">
+      <div class="page-header">
+        <h2>Clusters</h2>
+        <button class="btn btn-primary" onclick="showCreateCluster()">+ New Cluster</button>
+      </div>
+      <div class="card"><div id="clustersTable"></div></div>
+    </div>
+
+    <!-- Environments -->
+    <div id="page-environments" class="page hidden">
+      <div class="page-header">
+        <h2>Environments</h2>
+        <button class="btn btn-primary" onclick="showCreateEnv()">+ New Environment</button>
+      </div>
+      <div class="card"><div id="envsTable"></div></div>
+    </div>
+
+    <!-- Namespaces -->
+    <div id="page-namespaces" class="page hidden">
+      <div class="page-header">
+        <h2>Namespaces</h2>
+        <button class="btn btn-primary" onclick="showCreateNs()">+ New Namespace</button>
+      </div>
+      <div class="card">
+        <div style="margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+          <label style="font-size:13px; color:var(--muted);">Cluster:</label>
+          <select id="nsClusterSelect" style="background:var(--bg); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:var(--radius); font-size:13px;" onchange="loadNamespaces()">
+            <option value="">Select a cluster...</option>
+          </select>
+        </div>
+        <div id="nsTable"></div>
+      </div>
+    </div>
+
+    <!-- Jobs -->
+    <div id="page-jobs" class="page hidden">
+      <div class="page-header">
+        <h2>Jobs</h2>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input id="jobIdInput" placeholder="Enter job ID (job_...)" style="background:var(--bg); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:var(--radius); font-size:13px; font-family:monospace; width:260px;" />
+          <button class="btn btn-primary" onclick="lookupJob()">Lookup</button>
+        </div>
+      </div>
+      <div class="card"><div id="jobDetail"></div></div>
+    </div>
+
+    <!-- Users -->
+    <div id="page-users" class="page hidden">
+      <div class="page-header">
+        <h2>Users</h2>
+        <button class="btn btn-primary" onclick="showCreateUser()">+ New User</button>
+      </div>
+      <div class="card"><div id="usersTable"></div></div>
+    </div>
+
+    <!-- Permissions -->
+    <div id="page-permissions" class="page hidden">
+      <div class="page-header">
+        <h2>Permissions</h2>
+        <button class="btn btn-primary" onclick="showGrantPerm()">+ Grant Permission</button>
+      </div>
+      <div class="card">
+        <div style="margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+          <label style="font-size:13px; color:var(--muted);">User:</label>
+          <select id="permUserSelect" style="background:var(--bg); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:var(--radius); font-size:13px;" onchange="loadPermissions()">
+            <option value="">Select a user...</option>
+          </select>
+        </div>
+        <div id="permsTable"></div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- Modal container -->
+<div id="modalContainer"></div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toasts"></div>
+
+<script>
+const API = '/api/v1';
+
+// ─── Helpers ───
+
+let _apiKey = sessionStorage.getItem('apiKey') || '';
+
+function getKey() {
+  return _apiKey;
+}
+
+async function apiFetch(path, opts = {}) {
+  const key = getKey();
+  if (!key) { toast('Not authenticated', 'error'); throw new Error('no key'); }
+  const headers = { 'Authorization': `Bearer ${key}`, ...(opts.headers || {}) };
+  if (opts.body && typeof opts.body === 'object') {
+    headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(opts.body);
+  }
+  const res = await fetch(`${API}${path}`, { ...opts, headers });
+  if (res.status === 401) { doLogout(); throw new Error('Session expired'); }
+  if (res.status === 204) return null;
+  const data = await res.json();
+  if (!res.ok) {
+    const msg = data?.error?.message || data?.detail || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+function badge(status) {
+  return `<span class="badge badge-${status}">${status}</span>`;
+}
+
+function timeAgo(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString();
+}
+
+function showModal(html) {
+  document.getElementById('modalContainer').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`;
+}
+
+function closeModal() {
+  document.getElementById('modalContainer').innerHTML = '';
+}
+
+function emptyState(msg) {
+  return `<div class="empty"><div class="icon">&#128193;</div>${msg}</div>`;
+}
+
+// ─── Navigation ───
+
+const pages = ['clusters', 'environments', 'namespaces', 'jobs', 'users', 'permissions'];
+
+document.getElementById('nav').addEventListener('click', (e) => {
+  const li = e.target.closest('li[data-page]');
+  if (!li) return;
+  const page = li.dataset.page;
+  document.querySelectorAll('.nav li').forEach(n => n.classList.remove('active'));
+  li.classList.add('active');
+  pages.forEach(p => {
+    document.getElementById(`page-${p}`).classList.toggle('hidden', p !== page);
+  });
+  loadPage(page);
+});
+
+function loadPage(page) {
+  switch (page) {
+    case 'clusters': loadClusters(); break;
+    case 'environments': loadEnvironments(); break;
+    case 'namespaces': loadNsClusterList(); break;
+    case 'jobs': break;
+    case 'users': loadUsers(); break;
+    case 'permissions': loadPermUserList(); break;
+  }
+}
+
+// ─── Login / Logout ───
+
+async function doLogin() {
+  const usernameEl = document.getElementById('loginUsername');
+  const passEl = document.getElementById('loginPassword');
+  const errEl = document.getElementById('loginError');
+  const btn = document.getElementById('loginBtn');
+  const username = usernameEl.value.trim();
+  const password = passEl.value;
+  if (!username || !password) { errEl.textContent = 'Please enter username and password'; return; }
+  errEl.textContent = '';
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error?.message || data?.detail || 'Login failed');
+    }
+    _apiKey = data.token;
+    sessionStorage.setItem('apiKey', data.token);
+    _showApp(data.user);
+  } catch (e) {
+    errEl.textContent = e.message || 'Invalid credentials';
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
+}
+
+function doLogout() {
+  // Fire logout request (best-effort)
+  if (_apiKey) {
+    fetch(`${API}/auth/logout`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${_apiKey}` },
+    }).catch(() => {});
+  }
+  _apiKey = '';
+  sessionStorage.removeItem('apiKey');
+  document.getElementById('appShell').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('loginUsername').value = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginError').textContent = '';
+  _stopClusterPoll();
+}
+
+function _showApp(user) {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = 'flex';
+  const label = user ? `${user.name || user.username} (${user.role})` : '';
+  document.getElementById('sidebarUser').textContent = label;
+  loadPage(currentPage());
+}
+
+// Auto-login if session token is saved
+(async () => {
+  if (_apiKey) {
+    try {
+      const headers = { 'Authorization': `Bearer ${_apiKey}` };
+      const res = await fetch(`${API}/users/me`, { headers });
+      if (!res.ok) throw new Error();
+      const me = await res.json();
+      _showApp(me);
+    } catch {
+      _apiKey = '';
+      sessionStorage.removeItem('apiKey');
+    }
+  }
+})();
+
+document.getElementById('loginPassword').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') doLogin();
+});
+document.getElementById('loginUsername').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('loginPassword').focus();
+});
+
+function currentPage() {
+  const active = document.querySelector('.nav li.active');
+  return active ? active.dataset.page : 'clusters';
+}
+
+
+// ──────────────────────────────────────────────
+//  CLUSTERS
+// ──────────────────────────────────────────────
+
+let _clusterPollTimer = null;
+
+async function loadClusters() {
+  const el = document.getElementById('clustersTable');
+  try {
+    const data = await apiFetch('/clusters');
+    if (!data.length) { el.innerHTML = emptyState('No clusters yet'); _stopClusterPoll(); return; }
+    el.innerHTML = `<table>
+      <tr><th>ID</th><th>Name</th><th>Nodes</th><th>Control Plane</th><th>Workers</th><th>Status</th><th>Latest Job</th><th>Created</th><th></th></tr>
+      ${data.map(c => `<tr>
+        <td class="mono">${esc(c.id)}</td>
+        <td>${esc(c.name)}</td>
+        <td>${c.node_count}</td>
+        <td class="mono" style="font-size:11px">${c.nodes.control_plane.join(', ')}</td>
+        <td class="mono" style="font-size:11px">${c.nodes.workers.join(', ')}</td>
+        <td>${badge(c.status)}</td>
+        <td>${c.latest_job_id ? `<a href="#" class="mono" style="font-size:12px" onclick="event.preventDefault();goToJob('${c.latest_job_id}')">${esc(c.latest_job_id)}</a>` : '—'}</td>
+        <td style="font-size:12px; color:var(--muted)">${timeAgo(c.created_at)}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="deleteCluster('${c.id}')">Delete</button></td>
+      </tr>`).join('')}
+    </table>`;
+    // Auto-poll while any cluster is in a transitional state
+    if (data.some(c => ['creating', 'deleting'].includes(c.status))) {
+      _startClusterPoll();
+    } else {
+      _stopClusterPoll();
+    }
+  } catch (e) { el.innerHTML = emptyState(e.message); _stopClusterPoll(); }
+}
+
+function _startClusterPoll() {
+  if (!_clusterPollTimer) {
+    _clusterPollTimer = setInterval(() => {
+      if (currentPage() === 'clusters') loadClusters();
+    }, 5000);
+  }
+}
+
+function _stopClusterPoll() {
+  if (_clusterPollTimer) {
+    clearInterval(_clusterPollTimer);
+    _clusterPollTimer = null;
+  }
+}
+
+function showCreateCluster() {
+  showModal(`
+    <h3>Create Cluster</h3>
+    <div class="form-group"><label>Name</label><input id="m-clu-name" placeholder="my-cluster" /></div>
+    <div class="form-group"><label>Total Node Count</label><input id="m-clu-nodes" type="number" value="3" min="1" max="20" /></div>
+    <div class="actions">
+      <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="createCluster()">Create</button>
+    </div>
+  `);
+}
+
+async function createCluster() {
+  try {
+    const name = document.getElementById('m-clu-name').value.trim();
+    const node_count = parseInt(document.getElementById('m-clu-nodes').value, 10);
+    const res = await apiFetch('/clusters', { method: 'POST', body: { name, node_count } });
+    toast(`Cluster created — Job: ${res.job_id}`);
+    closeModal();
+    loadClusters();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteCluster(id) {
+  if (!confirm(`Delete cluster ${id}?`)) return;
+  try {
+    const res = await apiFetch(`/clusters/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    toast(`Deleting cluster — Job: ${res.job_id}`);
+    loadClusters();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function _envSelect(clusterId, currentEnvId) {
+  const opts = _envCache.map(e =>
+    `<option value="${esc(e.id)}" ${e.id === currentEnvId ? 'selected' : ''}>${esc(e.name)}</option>`
+  ).join('');
+  return `<select style="background:var(--bg); border:1px solid var(--border); color:var(--text); padding:4px 8px; border-radius:var(--radius); font-size:12px;" onchange="assignEnv('${clusterId}', this.value)">
+    <option value="" ${!currentEnvId ? 'selected' : ''}>None</option>${opts}</select>`;
+}
+
+async function assignEnv(clusterId, envId) {
+  try {
+    await apiFetch(`/clusters/${encodeURIComponent(clusterId)}`, {
+      method: 'PATCH',
+      body: { environment_id: envId || null },
+    });
+    toast(envId ? 'Environment assigned' : 'Environment unassigned');
+  } catch (e) { toast(e.message, 'error'); loadClusters(); }
+}
+
+
+// ──────────────────────────────────────────────
+//  ENVIRONMENTS
+// ──────────────────────────────────────────────
+
+async function loadEnvironments() {
+  const el = document.getElementById('envsTable');
+  try {
+    const data = await apiFetch('/environments');
+    if (!data.length) { el.innerHTML = emptyState('No environments yet'); return; }
+    el.innerHTML = `<table>
+      <tr><th>ID</th><th>Name</th><th>Status</th><th>Clusters</th><th>Created</th><th></th></tr>
+      ${data.map(e => `<tr>
+        <td class="mono">${esc(e.id)}</td>
+        <td>${esc(e.name)}</td>
+        <td>${badge(e.status)}</td>
+        <td class="mono" style="font-size:11px">${e.clusters.length ? e.clusters.join(', ') : '—'}</td>
+        <td style="font-size:12px; color:var(--muted)">${timeAgo(e.created_at)}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="deleteEnv('${e.id}')">Delete</button></td>
+      </tr>`).join('')}
+    </table>`;
+  } catch (e) { el.innerHTML = emptyState(e.message); }
+}
+
+function showCreateEnv() {
+  showModal(`
+    <h3>Create Environment</h3>
+    <div class="form-group"><label>Name</label><input id="m-env-name" placeholder="production" /></div>
+    <div class="actions">
+      <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="createEnv()">Create</button>
+    </div>
+  `);
+}
+
+async function createEnv() {
+  try {
+    const name = document.getElementById('m-env-name').value.trim();
+    await apiFetch('/environments', { method: 'POST', body: { name } });
+    toast('Environment created');
+    closeModal();
+    loadEnvironments();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteEnv(id) {
+  if (!confirm(`Delete environment ${id}?`)) return;
+  try {
+    await apiFetch(`/environments/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    toast('Environment deleted');
+    loadEnvironments();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+
+// ──────────────────────────────────────────────
+//  NAMESPACES
+// ──────────────────────────────────────────────
+
+async function loadNsClusterList() {
+  const sel = document.getElementById('nsClusterSelect');
+  const prev = sel.value;
+  try {
+    const clusters = await apiFetch('/clusters');
+    sel.innerHTML = '<option value="">Select a cluster...</option>' +
+      clusters.map(c => `<option value="${c.id}" ${c.id === prev ? 'selected' : ''}>${esc(c.name)} (${c.id})</option>`).join('');
+    if (sel.value) loadNamespaces();
+    else document.getElementById('nsTable').innerHTML = emptyState('Select a cluster to view its namespaces');
+  } catch (e) { document.getElementById('nsTable').innerHTML = emptyState(e.message); }
+}
+
+async function loadNamespaces() {
+  const cid = document.getElementById('nsClusterSelect').value;
+  const el = document.getElementById('nsTable');
+  if (!cid) { el.innerHTML = emptyState('Select a cluster'); return; }
+  try {
+    const data = await apiFetch(`/clusters/${encodeURIComponent(cid)}/namespaces`);
+    if (!data.length) { el.innerHTML = emptyState('No namespaces in this cluster'); return; }
+    el.innerHTML = `<table>
+      <tr><th>ID</th><th>Name</th><th>Status</th><th>Created</th><th></th></tr>
+      ${data.map(n => `<tr>
+        <td class="mono">${esc(n.id)}</td>
+        <td>${esc(n.name)}</td>
+        <td>${badge(n.status)}</td>
+        <td style="font-size:12px; color:var(--muted)">${timeAgo(n.created_at)}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="deleteNs('${cid}','${n.id}')">Delete</button></td>
+      </tr>`).join('')}
+    </table>`;
+  } catch (e) { el.innerHTML = emptyState(e.message); }
+}
+
+function showCreateNs() {
+  const cid = document.getElementById('nsClusterSelect').value;
+  if (!cid) { toast('Select a cluster first', 'error'); return; }
+  showModal(`
+    <h3>Create Namespace</h3>
+    <div class="form-group"><label>Cluster</label><input value="${cid}" readonly style="opacity:.7" /></div>
+    <div class="form-group"><label>Name</label><input id="m-ns-name" placeholder="my-namespace" /></div>
+    <div class="actions">
+      <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="createNs('${cid}')">Create</button>
+    </div>
+  `);
+}
+
+async function createNs(cid) {
+  try {
+    const name = document.getElementById('m-ns-name').value.trim();
+    await apiFetch(`/clusters/${encodeURIComponent(cid)}/namespaces`, { method: 'POST', body: { name } });
+    toast('Namespace created');
+    closeModal();
+    loadNamespaces();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteNs(cid, nsId) {
+  if (!confirm(`Delete namespace ${nsId}?`)) return;
+  try {
+    await apiFetch(`/clusters/${encodeURIComponent(cid)}/namespaces/${encodeURIComponent(nsId)}`, { method: 'DELETE' });
+    toast('Namespace deleted');
+    loadNamespaces();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+
+// ──────────────────────────────────────────────
+//  JOBS
+// ──────────────────────────────────────────────
+
+function goToJob(jobId) {
+  document.querySelectorAll('.nav li').forEach(n => n.classList.remove('active'));
+  const jobNav = document.querySelector('.nav li[data-page="jobs"]');
+  if (jobNav) jobNav.classList.add('active');
+  const pages = ['clusters', 'environments', 'namespaces', 'jobs', 'users', 'permissions'];
+  pages.forEach(p => {
+    document.getElementById(`page-${p}`).classList.toggle('hidden', p !== 'jobs');
+  });
+  document.getElementById('jobIdInput').value = jobId;
+  lookupJob();
+}
+
+async function lookupJob() {
+  const id = document.getElementById('jobIdInput').value.trim();
+  const el = document.getElementById('jobDetail');
+  if (!id) { toast('Enter a job ID', 'error'); return; }
+  try {
+    const j = await apiFetch(`/jobs/${encodeURIComponent(id)}`);
+    el.innerHTML = `<table>
+      <tr><th>Field</th><th>Value</th></tr>
+      <tr><td>ID</td><td class="mono">${esc(j.id)}</td></tr>
+      <tr><td>Cluster</td><td class="mono">${esc(j.cluster_id)}</td></tr>
+      <tr><td>Type</td><td>${esc(j.type)}</td></tr>
+      <tr><td>Status</td><td>${badge(j.status)}</td></tr>
+      <tr><td>Error</td><td>${j.error ? `<span style="color:var(--red)">${esc(j.error)}</span>` : '—'}</td></tr>
+      <tr><td>Created</td><td>${timeAgo(j.created_at)}</td></tr>
+    </table>`;
+  } catch (e) { el.innerHTML = emptyState(e.message); }
+}
+
+
+// ──────────────────────────────────────────────
+//  USERS
+// ──────────────────────────────────────────────
+
+async function loadUsers() {
+  const el = document.getElementById('usersTable');
+  try {
+    const data = await apiFetch('/users');
+    if (!data.length) { el.innerHTML = emptyState('No users'); return; }
+    el.innerHTML = `<table>
+      <tr><th>ID</th><th>Username</th><th>Name</th><th>Role</th><th>Active</th><th>Created</th><th></th></tr>
+      ${data.map(u => `<tr>
+        <td class="mono">${esc(u.id)}</td>
+        <td>${esc(u.username)}</td>
+        <td>${esc(u.name)}</td>
+        <td><span class="badge badge-active">${esc(u.role)}</span></td>
+        <td>${u.is_active ? '<span style="color:var(--green)">Yes</span>' : '<span style="color:var(--red)">No</span>'}</td>
+        <td style="font-size:12px; color:var(--muted)">${timeAgo(u.created_at)}</td>
+        <td>${u.is_active ? `<button class="btn btn-danger btn-sm" onclick="deactivateUser('${u.id}')">Deactivate</button>` : ''}</td>
+      </tr>`).join('')}
+    </table>`;
+  } catch (e) { el.innerHTML = emptyState(e.message); }
+}
+
+function showCreateUser() {
+  showModal(`
+    <h3>Create User</h3>
+    <div class="form-group"><label>Username</label><input id="m-usr-username" placeholder="johndoe" /></div>
+    <div class="form-group"><label>Name</label><input id="m-usr-name" placeholder="John Doe" /></div>
+    <div class="form-group"><label>Password</label><input id="m-usr-pass" type="password" placeholder="Min 4 characters" /></div>
+    <div class="form-group"><label>Role</label>
+      <select id="m-usr-role">
+        <option value="viewer">Viewer</option>
+        <option value="developer">Developer</option>
+        <option value="team_lead">Team Lead</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+    <div class="actions">
+      <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="createUser()">Create</button>
+    </div>
+  `);
+}
+
+async function createUser() {
+  try {
+    const username = document.getElementById('m-usr-username').value.trim();
+    const name = document.getElementById('m-usr-name').value.trim();
+    const password = document.getElementById('m-usr-pass').value;
+    const role = document.getElementById('m-usr-role').value;
+    if (!password || password.length < 4) { toast('Password must be at least 4 characters', 'error'); return; }
+    const res = await apiFetch('/users', { method: 'POST', body: { username, name, role, password } });
+    closeModal();
+    showModal(`
+      <h3>User Created</h3>
+      <p style="margin-bottom:12px; font-size:13px; color:var(--muted)">User can now sign in with their username and password.</p>
+      <div style="background:var(--bg); padding:12px; border-radius:var(--radius); font-size:13px;">
+        <div style="margin-bottom:6px"><strong>Username:</strong> <span style="color:var(--cyan)">${esc(res.username)}</span></div>
+        <div><strong>Role:</strong> <span style="color:var(--cyan)">${esc(res.role)}</span></div>
+      </div>
+      <div class="actions"><button class="btn btn-primary" onclick="closeModal(); loadUsers();">Done</button></div>
+    `);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deactivateUser(id) {
+  if (!confirm(`Deactivate user ${id}?`)) return;
+  try {
+    await apiFetch(`/users/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    toast('User deactivated');
+    loadUsers();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+
+// ──────────────────────────────────────────────
+//  PERMISSIONS
+// ──────────────────────────────────────────────
+
+async function loadPermUserList() {
+  const sel = document.getElementById('permUserSelect');
+  const prev = sel.value;
+  try {
+    const users = await apiFetch('/users');
+    sel.innerHTML = '<option value="">Select a user...</option>' +
+      users.filter(u => u.is_active).map(u => `<option value="${u.id}" ${u.id === prev ? 'selected' : ''}>${esc(u.name)} (${u.id})</option>`).join('');
+    if (sel.value) loadPermissions();
+    else document.getElementById('permsTable').innerHTML = emptyState('Select a user to view permissions');
+  } catch (e) { document.getElementById('permsTable').innerHTML = emptyState(e.message); }
+}
+
+async function loadPermissions() {
+  const uid = document.getElementById('permUserSelect').value;
+  const el = document.getElementById('permsTable');
+  if (!uid) { el.innerHTML = emptyState('Select a user'); return; }
+  try {
+    const data = await apiFetch(`/users/${encodeURIComponent(uid)}/permissions`);
+    if (!data.length) { el.innerHTML = emptyState('No permissions for this user'); return; }
+    el.innerHTML = `<table>
+      <tr><th>ID</th><th>Resource Type</th><th>Resource ID</th><th>Access</th><th></th></tr>
+      ${data.map(p => `<tr>
+        <td class="mono">${p.id}</td>
+        <td>${esc(p.resource_type)}</td>
+        <td class="mono">${esc(p.resource_id)}</td>
+        <td><span class="badge badge-${p.access === 'write' ? 'creating' : 'active'}">${p.access}</span></td>
+        <td><button class="btn btn-danger btn-sm" onclick="revokePerm(${p.id})">Revoke</button></td>
+      </tr>`).join('')}
+    </table>`;
+  } catch (e) { el.innerHTML = emptyState(e.message); }
+}
+
+function showGrantPerm() {
+  const uid = document.getElementById('permUserSelect').value;
+  if (!uid) { toast('Select a user first', 'error'); return; }
+  showModal(`
+    <h3>Grant Permission</h3>
+    <div class="form-group"><label>User ID</label><input value="${uid}" readonly style="opacity:.7; font-family:monospace" /></div>
+    <div class="form-group"><label>Resource Type</label>
+      <select id="m-perm-type">
+        <option value="cluster">Cluster</option>
+        <option value="environment">Environment</option>
+        <option value="namespace">Namespace</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Resource ID</label><input id="m-perm-rid" placeholder="clu_xxxxxxxx" /></div>
+    <div class="form-group"><label>Access</label>
+      <select id="m-perm-access">
+        <option value="read">Read</option>
+        <option value="write">Write</option>
+      </select>
+    </div>
+    <div class="actions">
+      <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="grantPerm('${uid}')">Grant</button>
+    </div>
+  `);
+}
+
+async function grantPerm(uid) {
+  try {
+    const resource_type = document.getElementById('m-perm-type').value;
+    const resource_id = document.getElementById('m-perm-rid').value.trim();
+    const access = document.getElementById('m-perm-access').value;
+    await apiFetch('/permissions', { method: 'POST', body: { user_id: uid, resource_type, resource_id, access } });
+    toast('Permission granted');
+    closeModal();
+    loadPermissions();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function revokePerm(id) {
+  if (!confirm(`Revoke permission #${id}?`)) return;
+  try {
+    await apiFetch(`/permissions/${id}`, { method: 'DELETE' });
+    toast('Permission revoked');
+    loadPermissions();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+
+// ─── Utility ───
+
+function esc(s) {
+  if (s == null) return '';
+  const div = document.createElement('div');
+  div.textContent = String(s);
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>

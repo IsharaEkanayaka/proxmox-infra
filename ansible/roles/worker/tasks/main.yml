@@ -1,0 +1,23 @@
+---
+- name: Check if node has already joined
+  stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf
+
+- name: Join worker to the cluster
+  command: "{{ hostvars[groups['control_plane'][0]]['k8s_join_command'] }}"
+  when: not kubelet_conf.stat.exists
+
+- name: Wait for node to be registered in the cluster
+  delegate_to: "{{ groups['control_plane'][0] }}"
+  shell: "KUBECONFIG=/home/ubuntu/.kube/config kubectl get node {{ inventory_hostname }}"
+  become: false
+  register: node_check
+  until: node_check.rc == 0
+  retries: 30
+  delay: 10
+
+- name: Label node as worker
+  delegate_to: "{{ groups['control_plane'][0] }}"
+  shell: "KUBECONFIG=/home/ubuntu/.kube/config kubectl label node {{ inventory_hostname }} node-role.kubernetes.io/worker= --overwrite"
+  become: false

@@ -1,0 +1,33 @@
+---
+- name: Prepare all Kubernetes nodes
+  hosts: k8s
+  become: true
+  roles:
+    - common
+
+- name: Initialize control plane
+  hosts: control_plane
+  become: true
+  roles:
+    - control_plane
+
+- name: Join workers to cluster
+  hosts: workers
+  become: true
+  roles:
+    - worker
+
+- name: Print cluster status
+  hosts: control_plane
+  become: false
+  tasks:
+    - name: Get node status
+      command: kubectl get nodes -o wide
+      environment:
+        KUBECONFIG: /home/ubuntu/.kube/config
+      register: nodes_output
+      changed_when: false
+
+    - name: Display cluster nodes
+      debug:
+        msg: "{{ nodes_output.stdout_lines }}"
