@@ -510,11 +510,29 @@ function _stopClusterPoll() {
   }
 }
 
-function showCreateCluster() {
+async function showCreateCluster() {
+  let envOptions = '<option value="">— None (admin only) —</option>';
+  try {
+    const envs = await apiFetch('/environments');
+    envOptions += envs.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+  } catch (_) {}
+
   showModal(`
     <h3>Create Cluster</h3>
-    <div class="form-group"><label>Name</label><input id="m-clu-name" placeholder="my-cluster" /></div>
-    <div class="form-group"><label>Total Node Count</label><input id="m-clu-nodes" type="number" value="3" min="1" max="20" /></div>
+    <div class="form-group">
+      <label>Name</label>
+      <input id="m-clu-name" placeholder="biomedical-nonprod" />
+    </div>
+    <div class="form-group">
+      <label>Environment (Team)</label>
+      <select id="m-clu-env">${envOptions}</select>
+      <small style="color:#888">Required if you are not an admin.</small>
+    </div>
+    <div class="form-group">
+      <label>Total Node Count</label>
+      <input id="m-clu-nodes" type="number" value="3" min="1" max="20" />
+      <small style="color:#888">1 control plane + remaining workers.</small>
+    </div>
     <div class="actions">
       <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="createCluster()">Create</button>
@@ -526,8 +544,12 @@ async function createCluster() {
   try {
     const name = document.getElementById('m-clu-name').value.trim();
     const node_count = parseInt(document.getElementById('m-clu-nodes').value, 10);
-    const res = await apiFetch('/clusters', { method: 'POST', body: { name, node_count } });
-    toast(`Cluster created — Job: ${res.job_id}`);
+    const environment_id = document.getElementById('m-clu-env').value || null;
+    if (!name) { toast('Cluster name is required', 'error'); return; }
+    const body = { name, node_count };
+    if (environment_id) body.environment_id = environment_id;
+    const res = await apiFetch('/clusters', { method: 'POST', body });
+    toast(`Cluster queued — Job: ${res.job_id}`);
     closeModal();
     loadClusters();
   } catch (e) { toast(e.message, 'error'); }
