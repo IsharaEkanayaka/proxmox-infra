@@ -2,24 +2,28 @@
 - name: Prepare all Kubernetes nodes
   hosts: k8s
   become: true
+  tags: common
   roles:
     - common
 
 - name: Initialize control plane
   hosts: control_plane
   become: true
+  tags: control_plane
   roles:
     - control_plane
 
 - name: Join workers to cluster
   hosts: workers
   become: true
+  tags: worker
   roles:
     - worker
 
 - name: Print cluster status
   hosts: control_plane
   become: false
+  tags: status
   tasks:
     - name: Get node status
       command: kubectl get nodes -o wide
@@ -35,6 +39,7 @@
 - name: Setup Prometheus & Grafana Monitoring
   hosts: control_plane
   become: false  # Running as 'ubuntu' so it uses the correct ~/.kube/config
+  tags: monitoring
   tasks:
     - name: Download Helm install script
       get_url:
@@ -75,19 +80,23 @@
 - name: Install kubesmith operator
   hosts: control_plane
   become: false
+  tags: operator
   vars:
-    operator_image: "docker.io/kubesmith/kubesmith-operator:latest"
+    operator_image: "docker.io/ishara24/kubesmith-operator:latest"
     operator_ns: kubesmith-system
+    github_raw: "https://raw.githubusercontent.com/IsharaEkanayaka/kubesmith-operator/main"
   tasks:
-    - name: Copy AppDeployment CRD manifest
-      copy:
-        src: "{{ playbook_dir }}/../../../kubesmith-operator/config/crd/bases/kubesmith.io_appdeployments.yaml"
+    - name: Download AppDeployment CRD manifest
+      get_url:
+        url: "{{ github_raw }}/config/crd/bases/kubesmith.io_appdeployments.yaml"
         dest: /tmp/kubesmith-crd-appdeployments.yaml
+        mode: '0644'
 
-    - name: Copy AppMonitor CRD manifest
-      copy:
-        src: "{{ playbook_dir }}/../../../kubesmith-operator/config/crd/bases/kubesmith.io_appmonitors.yaml"
+    - name: Download AppMonitor CRD manifest
+      get_url:
+        url: "{{ github_raw }}/config/crd/bases/kubesmith.io_appmonitors.yaml"
         dest: /tmp/kubesmith-crd-appmonitors.yaml
+        mode: '0644'
 
     - name: Apply CRDs
       command: "kubectl apply -f /tmp/kubesmith-crd-appdeployments.yaml -f /tmp/kubesmith-crd-appmonitors.yaml"
@@ -95,23 +104,45 @@
         KUBECONFIG: /home/ubuntu/.kube/config
 
     - name: Create operator namespace
-      command: kubectl create namespace {{ operator_ns }} --dry-run=client -o yaml | kubectl apply -f -
+      shell: kubectl create namespace {{ operator_ns }} --dry-run=client -o yaml | kubectl apply -f -
       environment:
         KUBECONFIG: /home/ubuntu/.kube/config
 
-    - name: Copy RBAC manifests
-      copy:
-        src: "{{ playbook_dir }}/../../../kubesmith-operator/config/rbac/"
-        dest: /tmp/kubesmith-rbac/
+    - name: Download ServiceAccount manifest
+      get_url:
+        url: "{{ github_raw }}/config/rbac/service_account.yaml"
+        dest: /tmp/kubesmith-serviceaccount.yaml
+        mode: '0644'
+
+    - name: Download Role manifest
+      get_url:
+        url: "{{ github_raw }}/config/rbac/role.yaml"
+        dest: /tmp/kubesmith-role.yaml
+        mode: '0644'
+
+    - name: Download RoleBinding manifest
+      get_url:
+        url: "{{ github_raw }}/config/rbac/role_binding.yaml"
+        dest: /tmp/kubesmith-rolebinding.yaml
+        mode: '0644'
 
     - name: Apply ServiceAccount and RBAC
-      command: kubectl apply -f /tmp/kubesmith-rbac/
+      command: >
+        kubectl apply
+        -f /tmp/kubesmith-serviceaccount.yaml
+        -f /tmp/kubesmith-role.yaml
+        -f /tmp/kubesmith-rolebinding.yaml
       environment:
         KUBECONFIG: /home/ubuntu/.kube/config
 
+    - name: Download manager manifest
+      get_url:
+        url: "{{ github_raw }}/config/manager/manager.yaml"
+        dest: /tmp/kubesmith-manager.yaml
+        mode: '0644'
+
     - name: Deploy operator controller manager
-      command: >
-        kubectl apply -f {{ playbook_dir }}/../../../kubesmith-operator/config/manager/manager.yaml
+      command: kubectl apply -f /tmp/kubesmith-manager.yaml
       environment:
         KUBECONFIG: /home/ubuntu/.kube/config
 
@@ -120,6 +151,15 @@
         kubectl set image deployment/kubesmith-operator-controller-manager
         manager={{ operator_image }}
         -n {{ operator_ns }}
+      environment:
+        KUBECONFIG: /home/ubuntu/.kube/config
+
+    - name: Increase operator memory limits for Helm chart installations
+      command: >
+        kubectl patch deployment kubesmith-operator-controller-manager
+        -n {{ operator_ns }}
+        --type=json
+        -p='[{"op":"replace","path":"/spec/template/spec/containers/0/resources/limits/memory","value":"1Gi"},{"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/memory","value":"256Mi"}]'
       environment:
         KUBECONFIG: /home/ubuntu/.kube/config
 

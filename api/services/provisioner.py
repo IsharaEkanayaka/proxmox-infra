@@ -67,7 +67,7 @@ def _generate_tfvars(tf_dir: str, cluster_id: str):
 
     # NOTE: 
     lines = [
-        f'proxmox_api_url          = "https://127.0.0.1:8006/api2/json"',
+        f'proxmox_api_url          = "{base.get("proxmox_api_url", "")}"',
         f'proxmox_api_token_id     = "{base.get("proxmox_api_token_id", "")}"',
         f'proxmox_api_token_secret = "{base.get("proxmox_api_token_secret", "")}"',
         '',
