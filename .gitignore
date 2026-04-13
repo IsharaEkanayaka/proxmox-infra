@@ -1,6 +1,7 @@
 # --- Secrets---
 packer/*.pkrvars.hcl
 packer/*.auto.pkrvars.hcl
+.env
 
 # --- Packer Temporary Files ---
 .packer_plugins/
@@ -35,4 +36,4 @@ workspaces/
 __pycache__/
 *.pyc
 ansible/inventory.ini
-workspaces/
+workspaces/.env

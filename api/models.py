@@ -107,6 +107,11 @@ class UserDetail(BaseModel):
     api_key: Optional[str] = None
     is_active: bool
     created_at: str
+    github_username: Optional[str] = None
+
+
+class UpdateUserRoleRequest(BaseModel):
+    role: str = Field(..., pattern=r'^(admin|team_lead|developer|viewer)$')
 
 
 class PromoteDeploymentRequest(BaseModel):

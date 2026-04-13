@@ -16,6 +16,7 @@ from ..database import get_db
 from ..errors import APIError
 from ..models import (
     CreateUserRequest,
+    UpdateUserRoleRequest,
     GrantPermissionRequest,
     PermissionDetail,
     UserDetail,
@@ -94,6 +95,25 @@ def get_user(user_id: str, user: dict = Depends(require_admin)):
             raise APIError("not_found", "user not found", 404)
         return UserDetail(id=r["id"], username=r["username"], name=r["name"], role=r["role"],
                           is_active=bool(r["is_active"]), created_at=r["created_at"])
+    finally:
+        db.close()
+
+
+@router.patch("/users/{user_id}/role", response_model=UserDetail)
+def update_user_role(user_id: str, req: UpdateUserRoleRequest, user: dict = Depends(require_admin)):
+    if user_id == user["id"] and req.role != user["role"]:
+        raise APIError("bad_request", "cannot change your own role", 400)
+    db = get_db()
+    try:
+        r = db.execute("SELECT * FROM users WHERE id=? AND is_active=1", (user_id,)).fetchone()
+        if not r:
+            raise APIError("not_found", "user not found", 404)
+        db.execute("UPDATE users SET role=? WHERE id=?", (req.role, user_id))
+        db.commit()
+        r = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        return UserDetail(id=r["id"], username=r["username"], name=r["name"], role=r["role"],
+                          is_active=bool(r["is_active"]), created_at=r["created_at"],
+                          github_username=r["github_username"])
     finally:
         db.close()
 

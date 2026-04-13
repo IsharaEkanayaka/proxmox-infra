@@ -8,6 +8,14 @@ WORKSPACES_DIR = os.path.join(PROJECT_ROOT, 'workspaces')
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
 DB_PATH = os.path.join(DATA_DIR, 'api.db')
 
+GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "")
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "")
+# Where the browser should land after GitHub auth completes (the kubesmith frontend)
+GITHUB_REDIRECT_URI = os.getenv("GITHUB_REDIRECT_URI", "http://localhost:8000/api/v1/auth/github/callback")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8000")
+# Only members of this GitHub org can sign in. Leave empty to allow any GitHub user.
+GITHUB_ORG = os.getenv("GITHUB_ORG", "")
+
 GRAFANA_URL = os.getenv("GRAFANA_URL", "http://localhost:3000")
 GRAFANA_USER = os.getenv("GRAFANA_USER", "admin")
 GRAFANA_PASSWORD = os.getenv("GRAFANA_PASSWORD", "SPskU5XpwtTtAnEdXwM34WbQ5E9Nsna377nb8ql8")

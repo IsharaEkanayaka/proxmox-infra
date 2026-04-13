@@ -124,6 +124,18 @@ def _migrate(conn: sqlite3.Connection):
         logger.info("Migration: Adding role column to permissions table")
         conn.execute("ALTER TABLE permissions ADD COLUMN role TEXT")
 
+    # Add github_id and github_username columns to users
+    cursor = conn.execute("PRAGMA table_info(users)")
+    user_columns = [row['name'] for row in cursor.fetchall()]
+
+    if 'github_id' not in user_columns:
+        logger.info("Migration: Adding github_id column to users table")
+        conn.execute("ALTER TABLE users ADD COLUMN github_id TEXT")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_github_id ON users(github_id) WHERE github_id IS NOT NULL")
+    if 'github_username' not in user_columns:
+        logger.info("Migration: Adding github_username column to users table")
+        conn.execute("ALTER TABLE users ADD COLUMN github_username TEXT")
+
     # Drop UNIQUE constraint on clusters.name if it still exists
     row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='clusters'").fetchone()
     if row and 'name TEXT UNIQUE' in row[0]:

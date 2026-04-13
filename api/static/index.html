@@ -114,6 +114,11 @@
   .login-box .btn-login { width: 100%; padding: 10px; font-size: 14px; margin-top: 4px; }
   .login-box .login-error { color: var(--red); font-size: 13px; margin-top: 12px; min-height: 20px; }
   .login-box .spinner { margin: 0 auto; }
+  .login-divider { display: flex; align-items: center; gap: 10px; margin: 16px 0; color: var(--muted); font-size: 12px; }
+  .login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .btn-github { width: 100%; padding: 10px; font-size: 14px; background: #24292e; color: #fff; border: 1px solid #444; border-radius: var(--radius); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: background .15s; }
+  .btn-github:hover { background: #3a3f44; }
+  .btn-github svg { width: 18px; height: 18px; fill: #fff; flex-shrink: 0; }
 
   /* Sidebar user/logout */
   .sidebar-footer { margin-top: auto; border-top: 1px solid var(--border); padding: 12px 20px; }
@@ -139,6 +144,11 @@
     </div>
     <button class="btn btn-primary btn-login" id="loginBtn" onclick="doLogin()">Sign In</button>
     <div class="login-error" id="loginError"></div>
+    <div class="login-divider" id="githubDivider" style="display:none">or</div>
+    <button class="btn-github" id="githubBtn" style="display:none" onclick="doGithubLogin()">
+      <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      Sign in with GitHub
+    </button>
   </div>
 </div>
 
@@ -273,6 +283,25 @@ const API = '/api/v1';
 
 let _apiKey = sessionStorage.getItem('apiKey') || '';
 
+// If GitHub OAuth redirected back with ?token=... or ?auth_error=..., handle it immediately
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token');
+  const authError = params.get('auth_error');
+  if (token) {
+    _apiKey = token;
+    sessionStorage.setItem('apiKey', token);
+    window.history.replaceState({}, '', window.location.pathname);
+  } else if (authError === 'not_org_member') {
+    window.history.replaceState({}, '', window.location.pathname);
+    // Show the error once the DOM is ready
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('loginError').textContent =
+        'Access denied: you are not a member of the required GitHub organisation.';
+    });
+  }
+})();
+
 function getKey() {
   return _apiKey;
 }
@@ -353,6 +382,32 @@ function loadPage(page) {
     case 'permissions': loadPermUserList(); break;
   }
 }
+
+// ─── GitHub OAuth ───
+
+async function doGithubLogin() {
+  const btn = document.getElementById('githubBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Redirecting…';
+  try {
+    const res = await fetch(`${API}/auth/github`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'GitHub auth unavailable');
+    window.location.href = data.url;
+  } catch (e) {
+    document.getElementById('loginError').textContent = e.message;
+    btn.disabled = false;
+    btn.innerHTML = `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" style="width:18px;height:18px;fill:#fff;flex-shrink:0"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg> Sign in with GitHub`;
+  }
+}
+
+// Show GitHub button only if the server has it configured
+fetch(`${API}/auth/github`).then(r => {
+  if (r.status !== 501) {
+    document.getElementById('githubDivider').style.display = 'flex';
+    document.getElementById('githubBtn').style.display = 'flex';
+  }
+}).catch(() => {});
 
 // ─── Login / Logout ───
 
@@ -752,18 +807,48 @@ async function loadUsers() {
     const data = await apiFetch('/users');
     if (!data.length) { el.innerHTML = emptyState('No users'); return; }
     el.innerHTML = `<table>
-      <tr><th>ID</th><th>Username</th><th>Name</th><th>Role</th><th>Active</th><th>Created</th><th></th></tr>
+      <tr><th>Username</th><th>Name</th><th>GitHub</th><th>Role</th><th>Active</th><th>Created</th><th></th></tr>
       ${data.map(u => `<tr>
-        <td class="mono">${esc(u.id)}</td>
-        <td>${esc(u.username)}</td>
+        <td class="mono">${esc(u.username)}</td>
         <td>${esc(u.name)}</td>
+        <td style="font-size:12px; color:var(--cyan)">${u.github_username ? esc(u.github_username) : '<span style="color:var(--muted)">—</span>'}</td>
         <td><span class="badge badge-active">${esc(u.role)}</span></td>
         <td>${u.is_active ? '<span style="color:var(--green)">Yes</span>' : '<span style="color:var(--red)">No</span>'}</td>
         <td style="font-size:12px; color:var(--muted)">${timeAgo(u.created_at)}</td>
-        <td>${u.is_active ? `<button class="btn btn-danger btn-sm" onclick="deactivateUser('${u.id}')">Deactivate</button>` : ''}</td>
+        <td style="display:flex; gap:6px;">
+          ${u.is_active ? `<button class="btn btn-sm" onclick="showChangeRole('${u.id}','${u.role}','${esc(u.name)}')">Role</button>` : ''}
+          ${u.is_active ? `<button class="btn btn-danger btn-sm" onclick="deactivateUser('${u.id}')">Deactivate</button>` : ''}
+        </td>
       </tr>`).join('')}
     </table>`;
   } catch (e) { el.innerHTML = emptyState(e.message); }
+}
+
+function showChangeRole(uid, currentRole, name) {
+  showModal(`
+    <h3>Change Role — ${esc(name)}</h3>
+    <div class="form-group"><label>New Role</label>
+      <select id="m-new-role">
+        ${['viewer','developer','team_lead','admin'].map(r =>
+          `<option value="${r}" ${r === currentRole ? 'selected' : ''}>${r}</option>`
+        ).join('')}
+      </select>
+    </div>
+    <div class="actions">
+      <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="changeRole('${uid}')">Save</button>
+    </div>
+  `);
+}
+
+async function changeRole(uid) {
+  try {
+    const role = document.getElementById('m-new-role').value;
+    await apiFetch(`/users/${encodeURIComponent(uid)}/role`, { method: 'PATCH', body: { role } });
+    toast('Role updated');
+    closeModal();
+    loadUsers();
+  } catch (e) { toast(e.message, 'error'); }
 }
 
 function showCreateUser() {
@@ -854,24 +939,44 @@ async function loadPermissions() {
   } catch (e) { el.innerHTML = emptyState(e.message); }
 }
 
-function showGrantPerm() {
+async function showGrantPerm() {
   const uid = document.getElementById('permUserSelect').value;
   if (!uid) { toast('Select a user first', 'error'); return; }
+
+  // Pre-load environments and clusters for the dropdowns
+  const [envs, clusters] = await Promise.all([
+    apiFetch('/environments').catch(() => []),
+    apiFetch('/clusters').catch(() => []),
+  ]);
+
+  const envOptions = envs.map(e => `<option value="${e.id}">${esc(e.name)} (${e.id})</option>`).join('');
+  const clusterOptions = clusters.map(c => `<option value="${c.id}">${esc(c.name)} (${c.id})</option>`).join('');
+
   showModal(`
     <h3>Grant Permission</h3>
-    <div class="form-group"><label>User ID</label><input value="${uid}" readonly style="opacity:.7; font-family:monospace" /></div>
     <div class="form-group"><label>Resource Type</label>
-      <select id="m-perm-type">
-        <option value="cluster">Cluster</option>
+      <select id="m-perm-type" onchange="updatePermResourceDropdown()">
         <option value="environment">Environment</option>
-        <option value="namespace">Namespace</option>
+        <option value="cluster">Cluster</option>
       </select>
     </div>
-    <div class="form-group"><label>Resource ID</label><input id="m-perm-rid" placeholder="clu_xxxxxxxx" /></div>
+    <div class="form-group"><label>Resource</label>
+      <select id="m-perm-rid">
+        ${envOptions || '<option value="">No environments found</option>'}
+      </select>
+    </div>
     <div class="form-group"><label>Access</label>
       <select id="m-perm-access">
         <option value="read">Read</option>
         <option value="write">Write</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Role in environment <span style="color:var(--muted); font-size:11px">(optional, for environments only)</span></label>
+      <select id="m-perm-role">
+        <option value="">— inherit global role —</option>
+        <option value="viewer">Viewer</option>
+        <option value="developer">Developer</option>
+        <option value="team_lead">Team Lead</option>
       </select>
     </div>
     <div class="actions">
@@ -879,14 +984,32 @@ function showGrantPerm() {
       <button class="btn btn-primary" onclick="grantPerm('${uid}')">Grant</button>
     </div>
   `);
+
+  // Store options for switching between types
+  window._permEnvOptions = envOptions;
+  window._permClusterOptions = clusterOptions;
+}
+
+function updatePermResourceDropdown() {
+  const type = document.getElementById('m-perm-type').value;
+  const sel = document.getElementById('m-perm-rid');
+  sel.innerHTML = type === 'environment'
+    ? (window._permEnvOptions || '<option value="">No environments found</option>')
+    : (window._permClusterOptions || '<option value="">No clusters found</option>');
+  document.getElementById('m-perm-role').parentElement.style.display =
+    type === 'environment' ? '' : 'none';
 }
 
 async function grantPerm(uid) {
   try {
     const resource_type = document.getElementById('m-perm-type').value;
-    const resource_id = document.getElementById('m-perm-rid').value.trim();
+    const resource_id = document.getElementById('m-perm-rid').value;
     const access = document.getElementById('m-perm-access').value;
-    await apiFetch('/permissions', { method: 'POST', body: { user_id: uid, resource_type, resource_id, access } });
+    const role = document.getElementById('m-perm-role')?.value || null;
+    if (!resource_id) { toast('Select a resource', 'error'); return; }
+    const body = { user_id: uid, resource_type, resource_id, access };
+    if (role) body.role = role;
+    await apiFetch('/permissions', { method: 'POST', body });
     toast('Permission granted');
     closeModal();
     loadPermissions();
