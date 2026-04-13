@@ -77,7 +77,7 @@ pip install fastapi uvicorn[standard] paramiko
 ### 4. Start the API Server
 
 ```bash
-uvicorn api.main:app --host 0.0.0.0 --port 8000
+set -a && source .env && set +a && uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
 On first start, a default admin user is created:
